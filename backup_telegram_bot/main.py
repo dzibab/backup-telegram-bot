@@ -202,6 +202,175 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await process_file(update, context, voice, filename)
 
 
+async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle stickers."""
+    user_id = update.effective_user.id
+
+    if not check_user_authorized(user_id):
+        await update.message.reply_text("Sorry, you are not authorized to use this bot.")
+        return
+
+    # Process the sticker
+    sticker = update.message.sticker
+    if not sticker:
+        await update.message.reply_text("No sticker found in the message.")
+        return
+
+    # Generate a filename for the sticker
+    extension = "webp"
+    if sticker.is_animated:
+        extension = "tgs"
+    elif sticker.is_video:
+        extension = "webm"
+
+    filename = f"sticker_{sticker.file_unique_id}.{extension}"
+
+    await process_file(update, context, sticker, filename)
+
+
+async def handle_animation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle animations (GIFs)."""
+    user_id = update.effective_user.id
+
+    if not check_user_authorized(user_id):
+        await update.message.reply_text("Sorry, you are not authorized to use this bot.")
+        return
+
+    # Process the animation
+    animation = update.message.animation
+    if not animation:
+        await update.message.reply_text("No animation found in the message.")
+        return
+
+    # Use file_name if available or generate one
+    filename = animation.file_name if animation.file_name else f"animation_{animation.file_unique_id}.gif"
+
+    await process_file(update, context, animation, filename)
+
+
+async def handle_video_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle video notes (round videos)."""
+    user_id = update.effective_user.id
+
+    if not check_user_authorized(user_id):
+        await update.message.reply_text("Sorry, you are not authorized to use this bot.")
+        return
+
+    # Process the video note
+    video_note = update.message.video_note
+    if not video_note:
+        await update.message.reply_text("No video note found in the message.")
+        return
+
+    # Generate a filename for the video note
+    filename = f"video_note_{video_note.file_unique_id}.mp4"
+
+    await process_file(update, context, video_note, filename)
+
+
+async def handle_forwarded_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle forwarded messages that might contain files."""
+    user_id = update.effective_user.id
+
+    if not check_user_authorized(user_id):
+        await update.message.reply_text("Sorry, you are not authorized to use this bot.")
+        return
+
+    message = update.message
+
+    # Check if this is a forwarded message
+    if not message.forward_date:
+        return  # Not a forwarded message
+
+    # Try to identify any media in the forwarded message
+    media_types = [
+        (message.document, message.document.file_name if message.document else None),
+        (message.photo[-1] if message.photo else None, f"photo_{message.photo[-1].file_unique_id}.jpg" if message.photo else None),
+        (message.video, message.video.file_name if message.video and message.video.file_name else f"video_{message.video.file_unique_id}.mp4" if message.video else None),
+        (message.audio, message.audio.file_name if message.audio and message.audio.file_name else f"audio_{message.audio.file_unique_id}.mp3" if message.audio else None),
+        (message.voice, f"voice_{message.voice.file_unique_id}.ogg" if message.voice else None),
+        (message.sticker, f"sticker_{message.sticker.file_unique_id}.webp" if message.sticker else None),
+        (message.animation, message.animation.file_name if message.animation and message.animation.file_name else f"animation_{message.animation.file_unique_id}.gif" if message.animation else None),
+        (message.video_note, f"video_note_{message.video_note.file_unique_id}.mp4" if message.video_note else None),
+    ]
+
+    for media, filename in media_types:
+        if media:
+            # We found a supported media type, process it
+            await process_file(update, context, media, filename)
+            return
+
+    # No supported media found in the forwarded message
+    await update.message.reply_text("No files found in the forwarded message that I can back up.")
+
+
+async def handle_generic_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Generic handler for all messages to catch any files that might have been missed.
+    This is a fallback to ensure all files are captured.
+    """
+    # Skip command messages and messages we've already handled with more specific handlers
+    if update.message.text and update.message.text.startswith('/'):
+        return
+
+    user_id = update.effective_user.id
+    if not check_user_authorized(user_id):
+        return
+
+    message = update.message
+    file_processed = False
+
+    # Check for any type of file that might be present in the message
+    if message.document:
+        await process_file(update, context, message.document, message.document.file_name)
+        file_processed = True
+
+    if message.photo:
+        photo = message.photo[-1]  # Get the largest photo
+        await process_file(update, context, photo, f"photo_{photo.file_unique_id}.jpg")
+        file_processed = True
+
+    if message.video:
+        filename = message.video.file_name if message.video.file_name else f"video_{message.video.file_unique_id}.mp4"
+        await process_file(update, context, message.video, filename)
+        file_processed = True
+
+    if message.audio:
+        filename = message.audio.file_name if message.audio.file_name else f"audio_{message.audio.file_unique_id}.mp3"
+        await process_file(update, context, message.audio, filename)
+        file_processed = True
+
+    if message.voice:
+        await process_file(update, context, message.voice, f"voice_{message.voice.file_unique_id}.ogg")
+        file_processed = True
+
+    if message.sticker:
+        extension = "webp"
+        if message.sticker.is_animated:
+            extension = "tgs"
+        elif message.sticker.is_video:
+            extension = "webm"
+        await process_file(update, context, message.sticker, f"sticker_{message.sticker.file_unique_id}.{extension}")
+        file_processed = True
+
+    if message.animation:
+        filename = message.animation.file_name if message.animation.file_name else f"animation_{message.animation.file_unique_id}.gif"
+        await process_file(update, context, message.animation, filename)
+        file_processed = True
+
+    if message.video_note:
+        await process_file(update, context, message.video_note, f"video_note_{message.video_note.file_unique_id}.mp4")
+        file_processed = True
+
+    # We don't want to send "No file found" messages for regular text messages
+    # So only respond if it seems like the user was trying to send a file
+    if not file_processed and (message.caption or message.forward_date):
+        await update.message.reply_text(
+            "I didn't find any files to back up in this message. "
+            "Please send me a file directly or forward a message containing a file."
+        )
+
+
 async def process_file(update: Update, context: ContextTypes.DEFAULT_TYPE, file_obj, filename: str) -> None:
     """Process and backup a file from Telegram."""
     try:
@@ -254,12 +423,22 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("status", status_command))
 
-    # File handlers
-    application.add_handler(MessageHandler(filters.Document, handle_document))
+    # File handlers for specific file types
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.VIDEO, handle_video))
     application.add_handler(MessageHandler(filters.AUDIO, handle_audio))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    application.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
+    application.add_handler(MessageHandler(filters.ANIMATION, handle_animation))
+    application.add_handler(MessageHandler(filters.VIDEO_NOTE, handle_video_note))
+
+    # Handler for forwarded messages
+    application.add_handler(MessageHandler(filters.FORWARDED, handle_forwarded_message))
+
+    # Generic handler to catch any other files we might have missed
+    # This should be registered last so it doesn't override more specific handlers
+    application.add_handler(MessageHandler(filters.ALL, handle_generic_message))
 
     # Log startup
     logger.info("Starting bot...")
