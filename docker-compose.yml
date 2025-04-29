@@ -1,0 +1,14 @@
+services:
+  backup-bot:
+    build: .
+    container_name: backup-telegram-bot
+    restart: unless-stopped
+    volumes:
+      # Mount the .env file for configuration
+      - ./.env:/app/.env:ro
+    # Share the host's network to allow connection to the SMB server
+    network_mode: "host"
+
+networks:
+  host-network:
+    driver: bridge
