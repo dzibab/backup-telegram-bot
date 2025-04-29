@@ -92,21 +92,40 @@ class BackupManager:
             return False
 
         try:
-            # Create a timestamped folder for the backup
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_folder = f"{self.backup_directory.rstrip('/')}/{timestamp}"
-
-            # Try to create the backup folder
+            # Ensure backup directory exists
             try:
-                conn.createDirectory(self.smb_share, backup_folder)
+                conn.createDirectory(self.smb_share, self.backup_directory.rstrip('/'))
             except Exception:
-                # Directory might already exist or be created as part of the path
+                # Directory might already exist
+                pass
+
+            # Prepare the file path for upload
+            upload_path = f"{self.backup_directory.rstrip('/')}/{original_filename}"
+
+            # Check if file with same name already exists
+            try:
+                file_info = conn.getAttributes(self.smb_share, upload_path)
+                if file_info:
+                    # File exists, append a timestamp as postfix
+                    name_parts = original_filename.rsplit('.', 1)
+                    if len(name_parts) > 1:
+                        # If file has extension
+                        filename_without_ext, ext = name_parts
+                        timestamp = datetime.now().strftime("_%Y%m%d_%H%M%S")
+                        new_filename = f"{filename_without_ext}{timestamp}.{ext}"
+                    else:
+                        # If file has no extension
+                        timestamp = datetime.now().strftime("_%Y%m%d_%H%M%S")
+                        new_filename = f"{original_filename}{timestamp}"
+
+                    upload_path = f"{self.backup_directory.rstrip('/')}/{new_filename}"
+            except Exception:
+                # File doesn't exist, we can use the original filename
                 pass
 
             # Open the local file for reading
             with open(file_path, "rb") as file_obj:
                 # Upload the file to the SMB server
-                upload_path = f"{backup_folder}/{original_filename}"
                 conn.storeFile(self.smb_share, upload_path, file_obj)
 
             logger.info(f"Successfully backed up file to {upload_path}")
