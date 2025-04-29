@@ -1,0 +1,11 @@
+[project]
+name = "backup-telegram-bot"
+version = "2025.4.29"
+description = "A Telegram bot for backups for one user"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "python-telegram-bot>=21.6",
+    "pysmb>=1.2.9",
+    "python-dotenv>=1.0.0",
+]
